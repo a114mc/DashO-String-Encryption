@@ -3,3 +3,5 @@
 ## 开源DashO字符串加密
 
 ### WTFPL licensed code, do what the fuck you want with it.
+
+Horrible 2000+ USD scam
