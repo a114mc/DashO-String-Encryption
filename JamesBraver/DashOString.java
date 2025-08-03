@@ -7,6 +7,7 @@ import me.iris.ambien.obfuscator.builders.MethodBuilder;
 import me.iris.ambien.obfuscator.transformers.impl.data.StringEncryptionManager;
 import me.iris.ambien.obfuscator.utilities.GOTOASMUtils;
 import me.iris.ambien.obfuscator.utilities.MathUtil;
+import me.iris.ambien.obfuscator.utilities.kek.DescriptorGenerator;
 import me.iris.ambien.obfuscator.utilities.kek.myj2c.Myj2cASMUtils;
 import me.iris.ambien.obfuscator.utilities.string.StringUtil;
 import org.objectweb.asm.Label;
@@ -40,10 +41,9 @@ import org.objectweb.asm.tree.MethodNode;
  * @author a114mc
  */
 public class DashOStringEncryption implements Opcodes {
-    // Methods from StringBuilder
-    // Name 'toString' not included due to I don't want to shit a shit class that contains only 1 shit method
-    public static String[] dashOMethodNames = new String[]{"insert", "indexOf", "lastIndexOf", "append"};
 
+
+    private static final int jamesBraverIsStupid = 95;
     /**
      * DashO levels
      */
@@ -51,20 +51,32 @@ public class DashOStringEncryption implements Opcodes {
     /**
      * Basic DashO method descriptor
      */
-    private static final String descriptor_1 =
-            "(Ljava/lang/String;I)Ljava/lang/String;";    // String int -> String
-
+    private static final String descriptor_1 = DescriptorGenerator
+            .builder()
+            .args(String.class, int.class)
+            .returnType(String.class)
+            .build()
+            .toString();    // String int -> String
     /**
      * Level 10 String encryption method descriptor
      */
     private static final String descriptor_10 =
-            "(IILjava/lang/String;)Ljava/lang/String;";    // int int String -> String
+            DescriptorGenerator
+                    .builder()
+                    .args(int.class, int.class, String.class)
+                    .returnType(String.class)
+                    .build()
+                    .toString();    // int int String -> String
 
+    // Methods from StringBuilder
+    // Name 'toString' not included due to I don't want to shit a shit class that contains only 1 shit method
+    public static String[] dashOMethodNames = new String[]{"insert", "indexOf", "lastIndexOf", "append"};
+
+    private static String descriptor = "";
     /**
      * @see #process(ClassNode)
      */
-    private static String descriptor = "";
-    private static String methodName = "useless";
+    public static String d_methodName = "useless";
 
     public static void process(ClassNode classNode) {
         switch (StringEncryptionManager.dashO_level.getValue()) {
@@ -78,6 +90,8 @@ public class DashOStringEncryption implements Opcodes {
                 descriptor = descriptor_10;
                 break;
 
+            default:
+                throw new IllegalStateException("Unexpected dashO string encryption level: " + StringEncryptionManager.dashO_level.getValue());
         }
         pre:
         {
@@ -89,23 +103,31 @@ public class DashOStringEncryption implements Opcodes {
                     ) : ThreadLocalRandomManager.theThreadLocalRandom
                     .nextInt(2,
                             32);
-            methodName = shit0?dashOMethodNames[shit]:
+            d_methodName = shit0 ? dashOMethodNames[shit]:
             StringUtil.randomStringByNaming(shit,
                     Ambien.get.theNamingNaming
             );
         }
-        boolean shouldRemove = true;
+        boolean stringProcessed = false;
 
         for (MethodNode method : classNode.methods) {
 
             // Skip the decrypt method itself and empty methods
-            if (method.name.equals(
-                    methodName) || method.instructions == null || method.instructions.size() == 0) {
+            if (
+                    method.name.equals(d_methodName)
+                    || method.name.equals(AllatoriLikeStringEncryption.a_methodName)
+                    || GOTOASMUtils.isSpecialMethod(method)
+            ) {
                 continue;
             }
 
             InsnList insns = method.instructions;
             if (SizeEvaluator.willOverflow(method, insns)) {
+                Ambien.logger.warn(
+                        "Can't do DashO string encryption due to method size overflow at"
+                       +   classNode.name+ "#" + method.name
+                );
+
                 continue;
             }
 
@@ -114,16 +136,16 @@ public class DashOStringEncryption implements Opcodes {
                     LdcInsnNode ldc = (LdcInsnNode) insn;
                     if (ldc.cst instanceof String) {
                         // Do not process empty string calls
-                        if (((String) ldc.cst).isEmpty()) {
+                        if (((String) ldc.cst).length() < 2) {
                             continue;
                         }
-                        shouldRemove = false;
+                        stringProcessed = true;
                         processStringConstant(classNode, method, insns, ldc);
                     }
                 } else if (insn instanceof InvokeDynamicInsnNode) {
                     InvokeDynamicInsnNode invokeDynamic = (InvokeDynamicInsnNode) insn;
                     if (isStringConcatFactory(invokeDynamic)) {
-                        shouldRemove = !processInvokeDynamic(
+                        stringProcessed = processInvokeDynamic(
                                 classNode, method, insns,
                                 invokeDynamic
                         );
@@ -132,15 +154,8 @@ public class DashOStringEncryption implements Opcodes {
             }
         }
 
-        doing:
-        {
+        if (stringProcessed) {
             injectDecryptMethod(classNode); // Ensure decrypt method exists
-        }
-        post:
-        {
-            if (shouldRemove) {
-                removeDecryptMethod(classNode);
-            }
         }
     }
 
@@ -191,7 +206,7 @@ public class DashOStringEncryption implements Opcodes {
             newList.add(Myj2cASMUtils.pushInt(b));
         }
         newList.add(new MethodInsnNode(
-                INVOKESTATIC, classNode.name, methodName,
+                INVOKESTATIC, classNode.name, d_methodName,
                 descriptor, false
         ));
 
@@ -201,7 +216,7 @@ public class DashOStringEncryption implements Opcodes {
 
     private static void removeDecryptMethod(ClassNode classNode) {
         classNode.methods.removeIf(
-                method -> method.name.equals(methodName) && method.desc.equals(
+                method -> method.name.equals(d_methodName) && method.desc.equals(
                         descriptor));
     }
 
@@ -210,15 +225,15 @@ public class DashOStringEncryption implements Opcodes {
      * If it did not, inject it.
      *
      * @param classNode the class node to check and inject
-     * @see DashOStringEncryption#methodName
-     * @see DashOStringEncryption#descriptor
      * @author a114mc
      * @author ASMIfier
+     * @see DashOStringEncryption#d_methodName
+     * @see DashOStringEncryption#descriptor
      */
     private static void injectDecryptMethod(ClassNode classNode) {
         // 检查解密方法是否已存在，防止重复注入
         for (MethodNode existingMethod : classNode.methods) {
-            if (existingMethod.name.equals(methodName) && existingMethod.desc.equals(descriptor)) {
+            if (existingMethod.name.equals(d_methodName) && existingMethod.desc.equals(descriptor)) {
                 return; // Method exists
             }
         }
@@ -226,7 +241,7 @@ public class DashOStringEncryption implements Opcodes {
         // 定义方法访问标志和签名
         // 假设 'methodName' 和 'descriptor' 是预先定义的常量或字段
         MethodBuilder methodBuilder = MethodBuilder.builder()
-                .name(methodName)
+                .name(d_methodName)
                 .access(ACC_PRIVATE | ACC_STATIC)
                 .desc(descriptor)
                 .build();
@@ -500,7 +515,7 @@ public class DashOStringEncryption implements Opcodes {
                 methodVisitor.visitVarInsn(ILOAD, 4);
                 methodVisitor.visitInsn(CALOAD);
                 methodVisitor.visitVarInsn(ILOAD, 0);
-                methodVisitor.visitIntInsn(BIPUSH, 95);
+                methodVisitor.visitIntInsn(BIPUSH, jamesBraverIsStupid);
                 methodVisitor.visitInsn(IAND);
                 methodVisitor.visitInsn(IXOR);
                 methodVisitor.visitInsn(I2C);
@@ -555,88 +570,71 @@ public class DashOStringEncryption implements Opcodes {
     public static String autoEncode(int var1, int n2, String var0) {
         switch (StringEncryptionManager.dashO_level.getValue()) {
             case dashO_a: {
-                int var10001 = 4 + 1;
+                int var10001;
                 char[] var10003 = var0.toCharArray();
                 int var3 = var10003.length;
-                char[] var2 = var10003;
-                int var5 = 0;
 
                 int var10002;
-                for (int var4 = (4 << var10001) - 1 ^ 32; var5 != var3; var2[var10001] = (char) var10002) {
+                for (int var5 = 0; var5 != var3; var10003[var10001] = (char) var10002) {
                     var10001 = var5;
-                    var10002 = var1 & var4 ^ var2[var5];
+                    var10002 = var1 & jamesBraverIsStupid ^ var10003[var5];
                     ++var1;
                     ++var5;
                 }
 
-                return String.valueOf(var2, 0, var3).intern();
+                return String.valueOf(var10003, 0, var3).intern();
 
             }
             case dashO_b: {
-                int var10000 = 2 + 2;
-                int var10001 = 1 + 2 + 2;
+                int var10001;
                 char[] var10003 = var0.toCharArray();
                 int var2 = var10003.length;
-                char[] var3 = var10003;
-                int var5 = 0;
 
                 int var10002;
-                for (int var4 = (var10000 << var10001) + -1 ^ 32; var5 != var2; var3[var10001] = (char) var10002) {
+                for (int var5 = 0; var5 != var2; var10003[var10001] = (char) var10002) {
                     var10001 = var5;
-                    var10002 = var3[var5] ^ var1 & var4;
+                    var10002 = var10003[var5] ^ var1 & jamesBraverIsStupid;
                     ++var1;
                     ++var5;
                 }
 
-                return String.valueOf(var3, 0, var2).intern();
-
-
+                return String.valueOf(var10003, 0, var2).intern();
             }
             case dashO_c: {
-                int var10001 = 1 + 4;
                 var1 += 5;
                 char[] var10003 = var0.toCharArray();
                 int var5 = var10003.length;
-                char[] var3 = var10003;
                 int var2 = 0;
 
                 int var10002;
-                for (int var4 = (4 << var10001) - 1 ^ 32; var2 != var5; var3[var10001] = (char) var10002) {
+                for (int var10001; var2 != var5; var10003[var10001] = (char) var10002) {
                     var10001 = var2;
-                    var10002 = var3[var2] ^ var1 & var4;
+                    var10002 = var10003[var2] ^ var1 & jamesBraverIsStupid;
                     var1 += 7;
                     ++var2;
                 }
 
-                return String.valueOf(var3, 0, var5).intern();
+                return String.valueOf(var10003, 0, var5).intern();
 
 
             }
             case dashO_d: {
-                int var10000 = 2 + 2;
-                int var10001 = 1 + 2 + 2;
-                var1 += 12;
-                char[] var10003 = var0.toCharArray();
-                int var3 = var10003.length;
-                char[] var4 = var10003;
-                int var5 = 0;
+                final int INITIAL_SHIFT = 5;
 
-                int var10002;
-                for (int var2 = (var10000 << var10001) + -1 ^ 32; var5 != var3; var4[var10001] = (char) var10002) {
-                    var10001 = var5;
-                    var10002 = var4[var5] ^ var1 & var2;
-                    var1 += 7;
-                    ++var5;
+                int currentKey = var1 + 12;        // 初始密钥调整
+                char[] chars = var0.toCharArray();
+
+                for (int i = 0; i < chars.length; i++) {
+                    chars[INITIAL_SHIFT] = (char) (chars[i] ^ currentKey & jamesBraverIsStupid);
+                    currentKey += 7;               // 每次迭代密钥增加7
                 }
 
-                return String.valueOf(var4, 0, var3).intern();
-
-
+                return String.valueOf(chars).intern();
             }
             case dashO_e: {
                 char[] chars = var0.toCharArray();
                 for (int i = 0; i < chars.length; i++) {
-                    chars[i] = (char) (chars[i] ^ (var1 & 95)); // 95 似乎是硬编码的掩码
+                    chars[i] = (char) (chars[i] ^ (var1 & jamesBraverIsStupid));
                     var1 += n2;
                 }
                 return new String(chars).intern();
